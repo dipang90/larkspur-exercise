@@ -155,13 +155,6 @@ TOOL_FUNCTIONS = {
 
 
 def next_available_day(origin, dest, date, cabin="Y"):
-    """The earliest date with an open seat. Not one of the nine, and not in
-    TOOL_FUNCTIONS: the backend function existed all along and nothing had told
-    Claude it was there.
-
-    pax_count never crosses this function on purpose. The backend then answers
-    for a party of one, and finding that gap is Build 3's capacity case.
-    """
     return backend.earliest_alternative_date(origin, dest, date, cabin)
 
 

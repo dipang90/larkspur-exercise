@@ -68,7 +68,7 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:            # ✏�
     answer = ""
     turns = 1
     while response.stop_reason == "tool_use" and turns < MAX_TOOL_CALLS:
-        messages.append({"role": "assistant", "content": text_of(response)})
+        messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results(response)})
         answer = text_of(response)
         response = client.messages.create(
@@ -77,7 +77,7 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:            # ✏�
         )
         turns += 1
 
-    return answer
+    return text_of(response)
 
 
 def tool_list() -> List[Dict[str, Any]]:                   # ✏️ Build 2, step 2.2
@@ -114,22 +114,45 @@ def build_tools() -> List[Dict[str, Any]]:                 # ✏️ Build 1, ste
                 "Look up a Larkspur or Larkspur Link flight's current OpsFeed status for "
                 "one local date: status, delay minutes, and cause. Use this before telling "
                 "a customer anything about a flight's timing; never state it from memory."
+   
             ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "flight_no": {"type": "string"},
-                    "date": {"type": "string", "description": "MM/DD/YYYY"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD"},
                 },
                 "required": ["flight_no", "date"],
             },
         },
         {
             "name": "search_alternatives",
-            "description": "search",
+            "description": (
+                "Search for alternative flights for an existing Larkspur reservation, "
+                "covering other flights, times, routes, and nearby airports, so the "
+                "passenger can compare price, total travel time, and number of stops "
+                "and choose the option that suits them best. Returns a list of options, "
+                "each with flight numbers, departure and arrival times, and a unique "
+                "option_id to use when rebooking.\n\n"
+                "When to use: call this when the passenger asks for other options "
+                "(e.g. a cheaper, earlier, later, or more direct flight). Also offer it "
+                "proactively, asking first, when their booked flight is cancelled, "
+                "significantly delayed, or a connection will be missed. Do not use it "
+                "for questions about the current booking itself (baggage, seats, "
+                "check-in).\n\n"
+                "Before calling: you must have the passenger's 6-character PNR (booking "
+                "reference) and have confirmed it with them. If they haven't given it, "
+                "ask for it. After results come back, summarise the best few options "
+                "for the passenger rather than listing everything."
+            ),
             "input_schema": {
                 "type": "object",
-                "properties": {"pnr": {"type": "string"}},
+                "properties": {
+                    "pnr": {
+                        "type": "string",
+                        "description": "The passenger's booking reference (PNR), e.g. 'ABC123'.",
+                    }
+                },
                 "required": ["pnr"],
             },
         },
