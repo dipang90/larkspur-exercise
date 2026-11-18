@@ -15,5 +15,5 @@ decides in the moment who does what.
 - Agneeswaran Ponnuraman
 - Neeraj Kumar jha
 - Mayank Aherwar
-- Rupak Bhakat
+- Rupak Kumar Bhakat
 - V Karthik
