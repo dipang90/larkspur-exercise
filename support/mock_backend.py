@@ -107,6 +107,185 @@ def get_flight_status_raw(flight_no, date):
             "note": "No OpsFeed record for that flight number and date."}
 
 
+def _ground_stop_pattern(airport):
+    return re.compile(
+        r"\b" + re.escape(airport) + r"\b[^;]{0,100}?\bground stop\s+"
+        r"(?P<start>\d{1,2}:\d{2})-(?P<end>\d{1,2}:\d{2})\s+(?P<zone>[A-Z]{2,5})\b",
+        re.IGNORECASE,
+    )
+
+
+# Fixed UTC offsets for the zone labels OpsFeed remarks use.
+_ZONE_OFFSETS = {"MDT": -6, "MST": -7, "CDT": -5, "CST": -6, "EDT": -4, "EST": -5,
+                 "PDT": -7, "PST": -8}
+
+
+def _fixture_now():
+    """'Now' for the read tools: the moment bookings.json says the sample data
+    treats as now."""
+    return datetime.fromisoformat(load_bookings()["fixture_clock"])
+
+
+def _stop_bounds(key, now):
+    start, end, zone = key
+    hours = _ZONE_OFFSETS.get(zone, now.utcoffset().total_seconds() / 3600)
+    tz = timezone(timedelta(hours=hours))
+    day = now.astimezone(tz).date()
+
+    def make(hhmm):
+        return datetime.combine(day, datetime.strptime(hhmm, "%H:%M").time(), tz)
+
+    return make(start), make(end)
+
+
+def ground_stop_status_raw(airport="DEN"):
+    """Ground-stop window for an airport, judged against now.
+
+    The window is only recorded in flight remarks (for example "DEN ground stop
+    13:02-15:50 MDT"). Remarks on the same date that name the same airport and
+    window are one event, so duplicates collapse.
+    """
+    now = _fixture_now()
+    airport = str(airport or "DEN").strip().upper()
+    today = now.strftime("%Y-%m-%d")
+    pattern = _ground_stop_pattern(airport)
+    windows = set()
+    for row in load_flights():
+        if row["date"] != today:
+            continue
+        for match in pattern.finditer(row.get("remarks", "")):
+            windows.add((match["start"], match["end"], match["zone"].upper()))
+    if not windows:
+        return {"airport": airport, "date": today, "status": "NO_GROUND_STOP_RECORDED",
+                "note": f"No timed ground-stop window for {airport} on {today}. "
+                        "That is not confirmation that none exists."}
+
+    # If several distinct windows exist, prefer the one in effect, else the next.
+    ordered = sorted(windows, key=lambda k: _stop_bounds(k, now)[0])
+    chosen = (next((k for k in ordered if _stop_bounds(k, now)[0] <= now < _stop_bounds(k, now)[1]), None)
+              or next((k for k in ordered if now < _stop_bounds(k, now)[0]), ordered[-1]))
+    start_dt, end_dt = _stop_bounds(chosen, now)
+    if start_dt <= now < end_dt:
+        status = "ACTIVE"
+    elif now < start_dt:
+        status = "SCHEDULED"
+    else:
+        status = "ENDED"
+    result = {
+        "airport": airport,
+        "date": today,
+        "status": status,
+        "starts_at": chosen[0],
+        "expected_end": chosen[1],
+        "timezone": chosen[2],
+        "checked_at": now.strftime("%H:%M"),
+        "source": "flights.csv remarks, judged at bookings.json fixture_clock",
+        "note": "Expected end is a forecast, not a promise.",
+    }
+    if status == "ACTIVE":
+        result["minutes_elapsed"] = int((now - start_dt).total_seconds() // 60)
+        result["minutes_remaining_expected"] = int((end_dt - now).total_seconds() // 60)
+    return result
+
+
+def _has_departed(row, now):
+    """True if the estimated departure is before the fixture clock (the same rule
+    search_alternatives uses, so the two tools agree)."""
+    today = now.strftime("%Y-%m-%d")
+    if row["date"] != today:
+        return row["date"] < today
+    return _add_minutes(row["sched_dep_local"], row["delay_min"]) < now.strftime("%H:%M")
+
+
+def seats_left_raw(flight_no, date, cabin="Y", passenger_count=1):
+    """Return available seats in one cabin and whether the party fits."""
+    date = str(date)
+    if not ISO_DATE.match(date):
+        return {"error": "date must be YYYY-MM-DD, got %s" % date}
+    cabin = str(cabin or "Y").strip().upper()
+    if cabin not in {"Y", "J"}:
+        return {"error": "cabin must be Y or J"}
+    try:
+        passenger_count = int(passenger_count)
+    except (TypeError, ValueError):
+        return {"error": "passenger_count must be a positive integer"}
+    if passenger_count < 1:
+        return {"error": "passenger_count must be a positive integer"}
+    flight_no = str(flight_no).strip().upper()
+    now = _fixture_now()
+
+    if not (DATA_HORIZON_START <= date <= DATA_HORIZON_END):
+        return {"flight_no": flight_no, "date": date, "status": "NOT_IN_HORIZON",
+                "note": f"No inventory record outside {DATA_HORIZON_START} to {DATA_HORIZON_END}."}
+    for row in load_flights():
+        if row["flight_no"] == flight_no and row["date"] == date:
+            available = row["seats_left_" + cabin]
+            status = row["status"]
+            departed = _has_departed(row, now)
+            bookable = status not in {"CANCELLED", "DIVERTED"} and not departed
+            result = {
+                "flight_no": flight_no,
+                "date": date,
+                "cabin": cabin,
+                "seats_left": available,
+                "passenger_count": passenger_count,
+                "enough_seats": bookable and available >= passenger_count,
+                "flight_status": status,
+                "past_estimated_departure": departed,
+            }
+            if not bookable:
+                result["note"] = "Flight is not bookable: cancelled, diverted, or its estimated departure has passed."
+            elif available < passenger_count:
+                result["short_by"] = passenger_count - available
+            return result
+    return {"flight_no": flight_no, "date": date, "status": "NOT_FOUND",
+            "note": "No inventory record for that flight number and date."}
+
+
+def hold_time_left_raw(hold_id):
+    """Minutes left on a seat hold, judged at FIXTURE_CLOCK.
+
+    Holds live in this process only (`_holds`). The fixture clock is frozen, so
+    a fresh hold always shows its full TTL; the arithmetic is still real.
+    """
+    hold_id = str(hold_id or "").strip().upper()
+    if hold_id in _confirmed:
+        return {"hold_id": hold_id, "status": "CONFIRMED",
+                "note": "Already confirmed; there is no hold timer any more."}
+    hold = _holds.get(hold_id)
+    if hold is None:
+        return {"hold_id": hold_id, "status": "UNKNOWN_HOLD",
+                "note": "No such hold in this session. Do not guess a time; "
+                        "offer to place a new hold."}
+    remaining = hold["expires_at"] - FIXTURE_CLOCK
+    seconds = int(remaining.total_seconds())
+    if seconds <= 0:
+        return {"hold_id": hold_id, "status": "EXPIRED", "option_id": hold["option_id"],
+                "minutes_left": 0, "note": "Hold expired; the seat may be gone."}
+    return {"hold_id": hold_id, "status": "ACTIVE", "option_id": hold["option_id"],
+            "minutes_left": seconds // 60, "seconds_left": seconds,
+            "expires_at": hold["expires_at"].isoformat()}
+
+
+def what_automation_will_not_do_raw():
+    """The Handbook's 'What chat automation will not do' section, plus its items."""
+    path = DATA_DIR / "fare_rules_excerpt.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {"error": f"Handbook excerpt not readable at {path}."}
+    match = re.search(r"^###\s*\d+\.\s*What chat automation will not do\s*\n(.*?)(?=^###\s|\Z)",
+                      text, re.MULTILINE | re.DOTALL)
+    if not match:
+        return {"error": "Section 'What chat automation will not do' not found in the Handbook excerpt."}
+    body = match.group(1).strip()
+    first = re.sub(r"\s+are handled by people$", "", body.split(". ")[0].rstrip("."))
+    items = [i.strip() for i in re.split(r",\s*(?:and\s+)?|\s+and\s+(?=[a-z]+ )", first.rstrip(".")) if i.strip()]
+    return {"section": "7. What chat automation will not do", "text": body,
+            "handled_by_people": items, "source": "fare_rules_excerpt.md",
+            "note": "For these, explain, hand over with escalate_to_human, and do not attempt them."}
+
+
 def _add_minutes(hhmm, minutes):
     base = datetime.strptime(hhmm, "%H:%M")
     return (base + timedelta(minutes=minutes)).strftime("%H:%M")

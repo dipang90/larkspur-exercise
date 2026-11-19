@@ -45,6 +45,26 @@ def get_flight_status(flight_no, date):
     return backend.get_flight_status_raw(flight_no, date)
 
 
+def ground_stop_status(airport="DEN"):
+    """Status and expected end of the active ground-stop window, if known."""
+    return backend.ground_stop_status_raw(airport)
+
+
+def seats_left(flight_no, date, cabin="Y", passenger_count=1):
+    """Check free seats in a cabin and whether the party fits on that flight."""
+    return backend.seats_left_raw(flight_no, date, cabin, passenger_count)
+
+
+def hold_time_left(hold_id):
+    """Minutes left on a seat hold placed with hold_seat."""
+    return backend.hold_time_left_raw(hold_id)
+
+
+def what_automation_will_not_do():
+    """The Handbook's list of requests chat automation hands to people."""
+    return backend.what_automation_will_not_do_raw()
+
+
 def lookup_booking(pnr, last_name):
     """Trimmed, tool-vocabulary view: never the raw Altura record."""
     try:

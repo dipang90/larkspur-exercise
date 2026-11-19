@@ -13,11 +13,81 @@ from typing import Any, Dict, List
 from support import (MODEL, SYSTEM_PROMPT, call_local, execute_tool, mcp_client,
                      new_session, next_available_day, record_tool_result,
                      runtime_preamble)
+from support.tools import (ground_stop_status, hold_time_left, seats_left,
+                           what_automation_will_not_do)
 
 MAX_TOOL_CALLS = 8  # Larkspur's own build capped the loop here; then a human takes over.
 
 TONE_ADDENDUM = ""                       # ✏️ Build 4, step 4.1, intelligence goal
 EXTRA_TOOLS: List[Dict[str, Any]] = [
+    {
+        "name": "seats_left",
+        "description": (
+            "Check the free seats in one cabin on one specific flight and whether the "
+            "whole party fits. Use it when a customer asks if there is room on a named "
+            "flight, or before offering one. Needs flight_no and date. To find any flight "
+            "on a route, use search_alternatives or next_available_day instead. Read "
+            "enough_seats, not just seats_left: it is false for cancelled, diverted or "
+            "past-departure flights. This is a read; it does not hold a seat."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "flight_no": {"type": "string", "description": "Flight number, for example LK415."},
+                "date": {"type": "string", "description": "Flight date in YYYY-MM-DD format."},
+                "cabin": {"type": "string", "enum": ["Y", "J"], "default": "Y"},
+                "passenger_count": {"type": "integer", "description": "Number of passengers in the party.", "default": 1},
+            },
+            "required": ["flight_no", "date"],
+        },
+    },
+    {
+        "name": "ground_stop_status",
+        "description": (
+            "Check whether an airport ground stop is active right now and return its "
+            "status (ACTIVE, SCHEDULED, ENDED or NO_GROUND_STOP_RECORDED), start, "
+            "expected end, timezone and minutes remaining. Use it when a customer asks "
+            "whether Denver is still stopped or when the stop should end. Quote the end "
+            "time as an expectation, never a promise. Do not infer a ground stop from "
+            "one flight's delay; this is the source for it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "airport": {"type": "string", "description": "Three-letter airport code; defaults to DEN."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "hold_time_left",
+        "description": (
+            "Report how many minutes remain on a seat hold that hold_seat placed. Use "
+            "it when the customer asks how long they have to decide, or before they "
+            "confirm. Needs the hold_id that hold_seat returned; never guess one. If it "
+            "says EXPIRED or UNKNOWN_HOLD, tell the customer and offer a new hold. It "
+            "does not extend or create a hold."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "hold_id": {"type": "string", "description": "The hold_id returned by hold_seat, e.g. HOLD-1A2B3C."},
+            },
+            "required": ["hold_id"],
+        },
+    },
+    {
+        "name": "what_automation_will_not_do",
+        "description": (
+            "Return the Handbook's list of requests chat automation never completes and "
+            "hands to people (refunds, hotel approval, groups, minors, partner flights, "
+            "and so on). Use it when you are unsure whether a request is in scope, or "
+            "when a customer asks what this assistant can and cannot do. Takes no "
+            "arguments. If the request is on the list, explain and call escalate_to_human "
+            "with a summary; do not attempt it yourself."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     {
         "name": "next_available_day",
         "description": ("First day the customer can fly a route with enough free seats in a cabin,"
@@ -37,6 +107,10 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
     },
 ]   # ✏️ Build 2, step 2.1: schemas for the tools you add
 LOCAL_TOOLS: Dict[str, Any] = {
+    "seats_left": seats_left,
+    "ground_stop_status": ground_stop_status,
+    "hold_time_left": hold_time_left,
+    "what_automation_will_not_do": what_automation_will_not_do,
     "next_available_day": next_available_day,
 }         # ✏️ Build 2, step 2.1: the functions behind them
 

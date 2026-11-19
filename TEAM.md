@@ -16,4 +16,5 @@ decides in the moment who does what.
 - Neeraj Kumar jha
 - Mayank Aherwar
 - Rupak Kumar Bhakat
+- Souptik Chowdhury
 - V Karthik
