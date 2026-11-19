@@ -105,6 +105,31 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
             "required": ["origin", "dest", "date"]
         },
     },
+    { 
+        "name": "cause_in_plain_words",
+        "description": (
+            "Explain why the customer's flights was cancelled in simple,"
+            "cusomter-friendly language. Use claude label customer field"
+            " from disruption_policy.json to provide the explanation."
+            ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"cause": {"type": "string"}},
+            "required": ["cause"],
+        },
+    },
+    {
+        "name": "departures_in_window",
+        "description": (
+            "Find flights still departing from a specified airport"
+            " within given date and departure time window using flights.csv"
+            ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"airport": {"type": "string"}, "date": {"type": "string"}, "departure_time": {"type": "string"}},
+            "required": ["airport", "date", "departure_time"],
+        }
+    },
 ]   # ✏️ Build 2, step 2.1: schemas for the tools you add
 LOCAL_TOOLS: Dict[str, Any] = {
     "seats_left": seats_left,
@@ -112,6 +137,8 @@ LOCAL_TOOLS: Dict[str, Any] = {
     "hold_time_left": hold_time_left,
     "what_automation_will_not_do": what_automation_will_not_do,
     "next_available_day": next_available_day,
+    "cause_in_plain_words": cause_in_plain_words,
+    "departures_in_window":departures_in_window
 }         # ✏️ Build 2, step 2.1: the functions behind them
 
 
