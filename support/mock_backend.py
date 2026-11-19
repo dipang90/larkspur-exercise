@@ -291,6 +291,235 @@ def _add_minutes(hhmm, minutes):
     return (base + timedelta(minutes=minutes)).strftime("%H:%M")
 
 
+def cause_in_plain_words_raw(
+    flight_no,
+    date,
+    language="en"
+):
+    """
+    Return the customer-friendly cancellation reason.
+
+    Source:
+        flights.csv -> cause_code
+
+        Disruption_policy.json ->
+        cause_labels_customer -> cause_code -> language
+    """
+
+    try:
+        date = validate_date(date)
+
+    except ValueError as error:
+        return {"error": str(error)}
+
+    flight_no = str(flight_no).strip().upper()
+    language = str(language).strip().lower()
+
+    if language not in {"en", "es"}:
+        return {
+            "error": "Supported languages are en and es."
+        }
+
+    flights = load_flights()
+    policy = load_policy()
+
+    for row in flights:
+
+        if (
+            row["flight_no"].strip().upper() == flight_no
+            and row["date"].strip() == date
+        ):
+
+            status = row["status"].strip().upper()
+
+            if status != "CANCELLED":
+                return {
+                    "flight_no": flight_no,
+                    "date": date,
+                    "status": status,
+                    "message": "This flight is not cancelled."
+                }
+
+            cause_code = row.get(
+                "cause_code", ""
+            ).strip().upper()
+
+            if not cause_code:
+                return {
+                    "flight_no": flight_no,
+                    "date": date,
+                    "status": status,
+                    "error": "Cancellation cause is not available."
+                }
+
+            # Get customer-friendly cause labels
+            customer_labels = policy.get(
+                "cause_labels_customer", {}
+            )
+
+            # Match cause code and requested language
+            cause_details = customer_labels.get(
+                cause_code, {}
+            )
+
+            explanation = cause_details.get(language)
+
+            if not explanation:
+                return {
+                    "flight_no": flight_no,
+                    "date": date,
+                    "cause_code": cause_code,
+                    "error": "Customer-friendly explanation not found."
+                }
+
+            return {
+                "flight_no": flight_no,
+                "date": date,
+                "status": status,
+                "cause_code": cause_code,
+                "language": language,
+                "customer_explanation": explanation
+            }
+
+    return {
+        "flight_no": flight_no,
+        "date": date,
+        "status": "NOT_FOUND",
+        "message": "No matching flight found."
+    }
+
+
+def departures_in_windows_raw(
+    airport,
+    date,
+    start_time="12:00",
+    end_time="17:00"
+):
+    """
+    Find flights still departing from an airport
+    within the requested departure time window.
+
+    Source: flights.csv
+    """
+
+    try:
+        date = validate_date(date)
+
+        start = validate_time(start_time)
+        end = validate_time(end_time)
+
+    except ValueError as error:
+        return {"error": str(error)}
+
+    if start >= end:
+        return {
+            "error": "start_time must be earlier than end_time."
+        }
+
+    airport = str(airport).strip().upper()
+
+    flights = load_flights()
+
+    matching_flights = []
+
+    now = datetime.now()
+
+    for row in flights:
+
+        origin = row.get("origin", "").strip().upper()
+
+        flight_date = row.get("date", "").strip()
+
+        departure_time = row.get(
+            "sched_dep_local", ""
+        ).strip()
+
+        status = row.get("status", "").strip().upper()
+
+        # Filter by origin airport
+        if origin != airport:
+            continue
+
+        # Filter by flight date
+        if flight_date != date:
+            continue
+
+        # Exclude flights that are not departing
+        if status in {
+            "CANCELLED",
+            "DIVERTED",
+            "DEPARTED",
+            "ARRIVED",
+            "COMPLETED"
+        }:
+            continue
+
+        try:
+            departure = validate_time(departure_time)
+
+        except ValueError:
+            continue
+
+        # Filter by requested time window
+        if not (start <= departure <= end):
+            continue
+
+        # Exclude flights whose departure time has passed today
+        if flight_date == now.strftime("%Y-%m-%d"):
+            if departure <= now.time():
+                continue
+
+        matching_flights.append({
+            "flight_no": row["flight_no"],
+            "origin": origin,
+            "destination": row["dest"].strip().upper(),
+            "date": flight_date,
+            "departure_time": departure_time,
+            "arrival_time": row["sched_arr_local"],
+            "status": status,
+            "delay_min": int(row.get("delay_min") or 0)
+        })
+
+    # Sort by departure time
+    matching_flights.sort(
+        key=lambda flight: flight["departure_time"]
+    )
+
+    return {
+        "airport": airport,
+        "date": date,
+        "time_window": {
+            "start": start_time,
+            "end": end_time
+        },
+        "total_flights": len(matching_flights),
+        "departures": matching_flights
+    }
+
+def validate_time(value):
+    """Validate time in HH:MM format."""
+
+    try:
+        return datetime.strptime(
+            str(value).strip(),
+            "%H:%M"
+        ).time()
+
+    except ValueError:
+        raise ValueError("Time must be in HH:MM format")
+
+def validate_date(date):
+    """Validate date in YYYY-MM-DD format."""
+
+    date = str(date).strip()
+
+    if not ISO_DATE.match(date):
+        raise ValueError("date must be YYYY-MM-DD")
+
+    datetime.fromisoformat(date)
+
+    return date
+
 # ---------------------------------------------------------------------------
 # lookup_booking backend: Altura PNR retrieve
 # ---------------------------------------------------------------------------

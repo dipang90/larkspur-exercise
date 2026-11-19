@@ -65,6 +65,32 @@ def what_automation_will_not_do():
     return backend.what_automation_will_not_do_raw()
 
 
+def cause_in_plain_words(flight_no, date, language="en"):
+    """
+    Explain the flight cancellation reason in simple words.
+    """
+    return backend.cause_in_plain_words_raw(
+        flight_no,
+        date,
+        language
+    )
+
+def departures_in_windows(
+    airport,
+    date,
+    start_time="12:00",
+    end_time="17:00"
+):
+    """
+    Find upcoming departures from an airport within a time window.
+    """
+    return backend.depatures_in_windows_raw(
+        airport,
+        date,
+        start_time,
+        end_time
+    )
+
 def lookup_booking(pnr, last_name):
     """Trimmed, tool-vocabulary view: never the raw Altura record."""
     try:

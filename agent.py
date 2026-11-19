@@ -14,7 +14,7 @@ from support import (MODEL, SYSTEM_PROMPT, call_local, execute_tool, mcp_client,
                      new_session, next_available_day, record_tool_result,
                      runtime_preamble)
 from support.tools import (ground_stop_status, hold_time_left, seats_left,
-                           what_automation_will_not_do)
+                           what_automation_will_not_do,cause_in_plain_words,departures_in_windows)
 
 MAX_TOOL_CALLS = 8  # Larkspur's own build capped the loop here; then a human takes over.
 
@@ -105,29 +105,71 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
             "required": ["origin", "dest", "date"]
         },
     },
-    { 
+    {
         "name": "cause_in_plain_words",
         "description": (
-            "Explain why the customer's flights was cancelled in simple,"
-            "cusomter-friendly language. Use claude label customer field"
-            " from disruption_policy.json to provide the explanation."
-            ),
+            "Explain why a customer's flight was cancelled in simple "
+            "customer-friendly words. Use this tool when a customer asks "
+            "why their flight was cancelled. Look up the flight's cause_code "
+            "in flights.csv and match it with cause_labels_customer in "
+            "Disruption_policy.json. Return the customer-friendly label "
+            "in the requested language. Requires flight_no and date."
+        ),
         "input_schema": {
             "type": "object",
-            "properties": {"cause": {"type": "string"}},
-            "required": ["cause"],
-        },
+            "properties": {
+                "flight_no": {
+                    "type": "string",
+                    "description": "Flight number, for example LK101."
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Flight date in YYYY-MM-DD format."
+                },
+                "language": {
+                    "type": "string",
+                    "enum": ["en", "es"],
+                    "description": "Customer response language.",
+                    "default": "en"
+                }
+            },
+            "required": ["flight_no", "date"]
+        }
     },
     {
-        "name": "departures_in_window",
+        "name": "depatures_in_windows",
         "description": (
-            "Find flights still departing from a specified airport"
-            " within given date and departure time window using flights.csv"
-            ),
+            "Find flights that are still scheduled to depart from an airport "
+            "within a specified time window. Use this when a customer asks "
+            "what flights are still leaving Denver this afternoon or asks "
+            "about upcoming departures from an airport. Read flights.csv "
+            "and filter using origin, date and sched_dep_local. Exclude "
+            "cancelled, diverted and already departed flights. "
+            "Requires airport and date."
+        ),
         "input_schema": {
             "type": "object",
-            "properties": {"airport": {"type": "string"}, "date": {"type": "string"}, "departure_time": {"type": "string"}},
-            "required": ["airport", "date", "departure_time"],
+            "properties": {
+                "airport": {
+                    "type": "string",
+                    "description": "Origin airport code, for example DEN."
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Departure date in YYYY-MM-DD format."
+                },
+                "start_time": {
+                    "type": "string",
+                    "description": "Window start time in HH:MM format.",
+                    "default": "12:00"
+                },
+                "end_time": {
+                    "type": "string",
+                    "description": "Window end time in HH:MM format.",
+                    "default": "17:00"
+                }
+            },
+            "required": ["airport", "date"]
         }
     },
 ]   # ✏️ Build 2, step 2.1: schemas for the tools you add
@@ -138,7 +180,7 @@ LOCAL_TOOLS: Dict[str, Any] = {
     "what_automation_will_not_do": what_automation_will_not_do,
     "next_available_day": next_available_day,
     "cause_in_plain_words": cause_in_plain_words,
-    "departures_in_window":departures_in_window
+    "departures_in_window":departures_in_windows
 }         # ✏️ Build 2, step 2.1: the functions behind them
 
 
