@@ -177,6 +177,9 @@ TOOL_FUNCTIONS = {
 def next_available_day(origin, dest, date, cabin="Y"):
     return backend.earliest_alternative_date(origin, dest, date, cabin)
 
+def fare_rules(fare_family):
+    return backend.get_fare_rules(fare_family)
+
 
 def call_local(fn, name, args):
     """Run one tool that lives in agent.py's LOCAL_TOOLS, and record what it

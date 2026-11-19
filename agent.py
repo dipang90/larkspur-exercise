@@ -14,7 +14,7 @@ from support import (MODEL, SYSTEM_PROMPT, call_local, execute_tool, mcp_client,
                      new_session, next_available_day, record_tool_result,
                      runtime_preamble)
 from support.tools import (ground_stop_status, hold_time_left, seats_left,
-                           what_automation_will_not_do)
+                           what_automation_will_not_do, fare_rules)
 
 MAX_TOOL_CALLS = 8  # Larkspur's own build capped the loop here; then a human takes over.
 
@@ -88,30 +88,37 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
         ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
-    {
-        "name": "next_available_day",
-        "description": ("First day the customer can fly a route with enough free seats in a cabin,"
-        "Skips cancelled, diverted and already-departed flights."),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "origin": {"type": "string", "description": "3-letter origin airport code"},
-                "dest": {"type": "string", "description": "3-letter desination airport code"},
-                "date": {"type": "string", "description": "YYYY-MM-DD"},
-                "cabin": {"type": "string",
-                          "description": "Y for  main, J for first",
-                          "enum": ["Y", "J"], "default": "Y"},
-            },
-            "required": ["origin", "dest", "date"]
-        },
-    },
+    # {
+    #     "name": "next_available_day",
+    #     "description": ("First day the customer can fly a route with enough free seats in a cabin,"
+    #     "Skips cancelled, diverted and already-departed flights."),
+    #     "input_schema": {
+    #         "type": "object",
+    #         "properties": { },
+    #         "required": []},
+    # },
+    # {
+    #     "name": "fare_rules",
+    #     "description": (
+    #         "Return the fare rules for a given PNR, including change and cancellation "
+    #         "policies, fees, and any restrictions. Use it when a customer asks about "
+    #         "their fare conditions or when you need to check if a change is allowed. "
+    #         "Requires the PNR and last name to look up the booking."
+    #     ),
+    #     "input_schema": {
+    #         "type": "object",
+    #         "properties": {}, 
+    #         "required": [],
+    #     },
+    # }
 ]   # ✏️ Build 2, step 2.1: schemas for the tools you add
 LOCAL_TOOLS: Dict[str, Any] = {
     "seats_left": seats_left,
     "ground_stop_status": ground_stop_status,
     "hold_time_left": hold_time_left,
     "what_automation_will_not_do": what_automation_will_not_do,
-    "next_available_day": next_available_day,
+    # "next_available_day": next_available_day,
+    # "fare_rules": fare_rules,
 }         # ✏️ Build 2, step 2.1: the functions behind them
 
 
@@ -177,7 +184,7 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:            # ✏�
 def tool_list() -> List[Dict[str, Any]]:                   # ✏️ Build 2, step 2.2
     """Given. Exactly what Claude is offered on every turn; run.py --show-tools
     prints this list."""
-    return build_tools() + EXTRA_TOOLS #+ mcp_client.tools()
+    return build_tools() + EXTRA_TOOLS + mcp_client.tools()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
