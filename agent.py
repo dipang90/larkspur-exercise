@@ -14,7 +14,7 @@ from support import (MODEL, SYSTEM_PROMPT, call_local, execute_tool, mcp_client,
                      new_session, next_available_day, record_tool_result,
                      runtime_preamble)
 from support.tools import (ground_stop_status, hold_time_left, seats_left,
-                           what_automation_will_not_do,cause_in_plain_words,departures_in_windows)
+                           what_automation_will_not_do,fare_rules, cause_in_plain_words,departures_in_windows)
 
 MAX_TOOL_CALLS = 8  # Larkspur's own build capped the loop here; then a human takes over.
 
@@ -172,6 +172,29 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
             "required": ["airport", "date"]
         }
     },
+    # {
+    #     "name": "next_available_day",
+    #     "description": ("First day the customer can fly a route with enough free seats in a cabin,"
+    #     "Skips cancelled, diverted and already-departed flights."),
+    #     "input_schema": {
+    #         "type": "object",
+    #         "properties": { },
+    #         "required": []},
+    # },
+    # {
+    #     "name": "fare_rules",
+    #     "description": (
+    #         "Return the fare rules for a given PNR, including change and cancellation "
+    #         "policies, fees, and any restrictions. Use it when a customer asks about "
+    #         "their fare conditions or when you need to check if a change is allowed. "
+    #         "Requires the PNR and last name to look up the booking."
+    #     ),
+    #     "input_schema": {
+    #         "type": "object",
+    #         "properties": {}, 
+    #         "required": [],
+    #     },
+    # }
 ]   # ✏️ Build 2, step 2.1: schemas for the tools you add
 LOCAL_TOOLS: Dict[str, Any] = {
     "seats_left": seats_left,
@@ -180,7 +203,9 @@ LOCAL_TOOLS: Dict[str, Any] = {
     "what_automation_will_not_do": what_automation_will_not_do,
     "next_available_day": next_available_day,
     "cause_in_plain_words": cause_in_plain_words,
-    "departures_in_window":departures_in_windows
+    "departures_in_window":departures_in_window
+    # "next_available_day": next_available_day,
+    # "fare_rules": fare_rules,
 }         # ✏️ Build 2, step 2.1: the functions behind them
 
 
@@ -246,7 +271,7 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:            # ✏�
 def tool_list() -> List[Dict[str, Any]]:                   # ✏️ Build 2, step 2.2
     """Given. Exactly what Claude is offered on every turn; run.py --show-tools
     prints this list."""
-    return build_tools() + EXTRA_TOOLS #+ mcp_client.tools()
+    return build_tools() + EXTRA_TOOLS + mcp_client.tools()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

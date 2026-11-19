@@ -75,7 +75,7 @@ def cause_in_plain_words(flight_no, date, language="en"):
         language
     )
 
-def departures_in_windows(
+def departures_in_window(
     airport,
     date,
     start_time="12:00",
@@ -84,7 +84,7 @@ def departures_in_windows(
     """
     Find upcoming departures from an airport within a time window.
     """
-    return backend.depatures_in_windows_raw(
+    return backend.depatures_in_window_raw(
         airport,
         date,
         start_time,
@@ -202,6 +202,9 @@ TOOL_FUNCTIONS = {
 
 def next_available_day(origin, dest, date, cabin="Y"):
     return backend.earliest_alternative_date(origin, dest, date, cabin)
+
+def fare_rules(fare_family):
+    return backend.get_fare_rules(fare_family)
 
 
 def call_local(fn, name, args):

@@ -285,6 +285,14 @@ def what_automation_will_not_do_raw():
             "handled_by_people": items, "source": "fare_rules_excerpt.md",
             "note": "For these, explain, hand over with escalate_to_human, and do not attempt them."}
 
+def get_fare_rules(fare_family):
+    """Return fare rules for a given fare family."""
+    policy = load_policy()
+    fare_family_rules = policy.get("fare_family_rules", {})
+    rules = fare_family_rules.get(fare_family)
+    if not rules:
+        return {"error": f"No fare rules found for fare family '{fare_family}'."}
+    return {"fare_family": fare_family, "rules": rules}
 
 def _add_minutes(hhmm, minutes):
     base = datetime.strptime(hhmm, "%H:%M")
@@ -389,7 +397,7 @@ def cause_in_plain_words_raw(
     }
 
 
-def departures_in_windows_raw(
+def departures_in_window_raw(
     airport,
     date,
     start_time="12:00",
@@ -932,7 +940,6 @@ def _selftest():
     if failures:
         raise SystemExit(f"\n{failures} policy example(s) did not match. Fix resolve_policy before teaching from this.")
     print("\nAll self-tests passed.")
-
 
 if __name__ == "__main__":
     import sys
